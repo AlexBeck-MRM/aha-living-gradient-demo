@@ -1,5 +1,5 @@
-const STORAGE_KEY = "aha-living-gradient-playground:v25";
-const CONFIG_SCHEMA = "aha-living-gradient-playground/v25";
+const STORAGE_KEY = "aha-living-gradient-playground:v26";
+const CONFIG_SCHEMA = "aha-living-gradient-playground/v26";
 
 const prototype = document.querySelector(".prototype");
 const gradients = Array.from(document.querySelectorAll(".living-gradient"));
@@ -13,9 +13,9 @@ const resetButton = document.querySelector("[data-reset-config]");
 const copyStatus = document.querySelector("[data-copy-status]");
 const modeReadout = document.querySelector("[data-mode-readout]");
 
-const EXPORT_SIZE = 1080;
+const EXPORT_WIDTH = 1920;
+const EXPORT_HEIGHT = 1080;
 const EXPORT_FPS = 30;
-const TAU = Math.PI * 2;
 const MP4_MIME_TYPES = [
   "video/mp4;codecs=avc1.42E01E",
   "video/mp4;codecs=avc1",
@@ -573,43 +573,7 @@ function ensureShaderSurface(surface) {
     1, 1,
   ]), gl.STATIC_DRAW);
 
-  shaderRuntime.items.set(surface, {
-    canvas,
-    gl,
-    program,
-    buffer,
-    attribs: {
-      position: gl.getAttribLocation(program, "a_position"),
-    },
-    uniforms: {
-      resolution: gl.getUniformLocation(program, "u_resolution"),
-      time: gl.getUniformLocation(program, "u_time"),
-      cycle: gl.getUniformLocation(program, "u_cycle"),
-      speed: gl.getUniformLocation(program, "u_speed"),
-      scale: gl.getUniformLocation(program, "u_scale"),
-      rotation: gl.getUniformLocation(program, "u_rotation"),
-      flameX: gl.getUniformLocation(program, "u_flame_x"),
-      flameY: gl.getUniformLocation(program, "u_flame_y"),
-      flameWidth: gl.getUniformLocation(program, "u_flame_width"),
-      flameHeight: gl.getUniformLocation(program, "u_flame_height"),
-      flameStrength: gl.getUniformLocation(program, "u_flame_strength"),
-      taperPower: gl.getUniformLocation(program, "u_taper_power"),
-      tipRoundness: gl.getUniformLocation(program, "u_tip_roundness"),
-      warm: gl.getUniformLocation(program, "u_warm"),
-      warmSpread: gl.getUniformLocation(program, "u_warm_spread"),
-      deep: gl.getUniformLocation(program, "u_deep"),
-      shadowReach: gl.getUniformLocation(program, "u_shadow_reach"),
-      turbulence: gl.getUniformLocation(program, "u_turbulence"),
-      edgeSoftness: gl.getUniformLocation(program, "u_edge_softness"),
-      noiseScale: gl.getUniformLocation(program, "u_noise_scale"),
-      rise: gl.getUniformLocation(program, "u_rise"),
-      sway: gl.getUniformLocation(program, "u_sway"),
-      spineWobble: gl.getUniformLocation(program, "u_spine_wobble"),
-      tongue: gl.getUniformLocation(program, "u_tongue"),
-      tongueWidth: gl.getUniformLocation(program, "u_tongue_width"),
-      energy: gl.getUniformLocation(program, "u_energy"),
-    },
-  });
+  shaderRuntime.items.set(surface, createShaderRenderer(gl, canvas, program, buffer));
 }
 
 function destroyShaderSurface(surface) {
@@ -737,10 +701,15 @@ const shaderFragmentSource = `
     float warmPulse = mix(0.78, 1.18, breath);
     float warmMask = clamp((upperLight * 0.94 + tongue * u_tongue * 0.68 + crown * 0.54) * u_warm * warmPulse, 0.0, 0.94);
 
-    float lowerLeft = smoothstep(0.68, 0.02, vertical) * smoothstep(taper * 0.7, -taper * u_shadow_reach, p.x);
-    float sideShadow = smoothstep(-0.02, -taper * u_shadow_reach, p.x) * (0.34 + (1.0 - vertical) * 0.32);
-    float outsideShadow = (1.0 - clamp(body, 0.0, 1.0)) * 0.1;
-    float deepMask = clamp((lowerLeft * 0.62 + sideShadow * 0.34 + outsideShadow) * u_deep, 0.0, 0.88);
+    float shadowNoise = fbm(vec2(x * 1.7 * noiseScale - riseTime * 0.18, vertical * 2.0 * noiseScale + riseTime * 0.12));
+    float lowerWeight = 1.0 - smoothstep(0.12, 0.76, vertical);
+    float leftFalloff = 1.0 - smoothstep(-taper * (1.18 + u_shadow_reach * 0.32), taper * (0.58 + u_edge_softness), p.x);
+    float sideFalloff = 1.0 - smoothstep(-taper * (0.78 + u_shadow_reach * 0.28), taper * (0.92 + u_edge_softness), p.x);
+    float lowerLeft = lowerWeight * leftFalloff;
+    float sideShadow = sideFalloff * (0.16 + (1.0 - vertical) * 0.34);
+    float outsideShadow = (1.0 - clamp(body, 0.0, 1.0)) * 0.05;
+    float deepMaskRaw = lowerLeft * 0.46 + sideShadow * 0.26 + outsideShadow + (shadowNoise - 0.5) * 0.035;
+    float deepMask = smoothstep(0.04, 0.92, clamp(deepMaskRaw * u_deep, 0.0, 1.0)) * 0.74;
 
     float redHeat = clamp(body * (0.28 + breath * 0.2) + slowNoise * 0.06, 0.0, 0.48);
     vec3 color = AHA_RED;
@@ -787,7 +756,7 @@ function drawShadersOnce(now = performance.now()) {
 }
 
 function drawShaderItem(item, surface, now) {
-  const rect = surface.getBoundingClientRect();
+  const rect = item.canvas.getBoundingClientRect();
   const renderScale = 1;
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const width = Math.max(1, Math.round(rect.width * renderScale * dpr));
@@ -798,6 +767,50 @@ function drawShaderItem(item, surface, now) {
     item.canvas.height = height;
   }
 
+  drawShaderRenderer(item, (now - shaderRuntime.origin) / 1000, width, height);
+}
+
+function createShaderRenderer(gl, canvas, program, buffer) {
+  return {
+    canvas,
+    gl,
+    program,
+    buffer,
+    attribs: {
+      position: gl.getAttribLocation(program, "a_position"),
+    },
+    uniforms: {
+      resolution: gl.getUniformLocation(program, "u_resolution"),
+      time: gl.getUniformLocation(program, "u_time"),
+      cycle: gl.getUniformLocation(program, "u_cycle"),
+      speed: gl.getUniformLocation(program, "u_speed"),
+      scale: gl.getUniformLocation(program, "u_scale"),
+      rotation: gl.getUniformLocation(program, "u_rotation"),
+      flameX: gl.getUniformLocation(program, "u_flame_x"),
+      flameY: gl.getUniformLocation(program, "u_flame_y"),
+      flameWidth: gl.getUniformLocation(program, "u_flame_width"),
+      flameHeight: gl.getUniformLocation(program, "u_flame_height"),
+      flameStrength: gl.getUniformLocation(program, "u_flame_strength"),
+      taperPower: gl.getUniformLocation(program, "u_taper_power"),
+      tipRoundness: gl.getUniformLocation(program, "u_tip_roundness"),
+      warm: gl.getUniformLocation(program, "u_warm"),
+      warmSpread: gl.getUniformLocation(program, "u_warm_spread"),
+      deep: gl.getUniformLocation(program, "u_deep"),
+      shadowReach: gl.getUniformLocation(program, "u_shadow_reach"),
+      turbulence: gl.getUniformLocation(program, "u_turbulence"),
+      edgeSoftness: gl.getUniformLocation(program, "u_edge_softness"),
+      noiseScale: gl.getUniformLocation(program, "u_noise_scale"),
+      rise: gl.getUniformLocation(program, "u_rise"),
+      sway: gl.getUniformLocation(program, "u_sway"),
+      spineWobble: gl.getUniformLocation(program, "u_spine_wobble"),
+      tongue: gl.getUniformLocation(program, "u_tongue"),
+      tongueWidth: gl.getUniformLocation(program, "u_tongue_width"),
+      energy: gl.getUniformLocation(program, "u_energy"),
+    },
+  };
+}
+
+function drawShaderRenderer(item, shaderTime, width = item.canvas.width, height = item.canvas.height) {
   const gl = item.gl;
   gl.viewport(0, 0, width, height);
   gl.useProgram(item.program);
@@ -806,7 +819,7 @@ function drawShaderItem(item, surface, now) {
   gl.vertexAttribPointer(item.attribs.position, 2, gl.FLOAT, false, 0, 0);
 
   gl.uniform2f(item.uniforms.resolution, width, height);
-  gl.uniform1f(item.uniforms.time, (now - shaderRuntime.origin) / 1000);
+  gl.uniform1f(item.uniforms.time, shaderTime);
   gl.uniform1f(item.uniforms.cycle, state.duration);
   gl.uniform1f(item.uniforms.speed, state.evolutionSpeed);
   gl.uniform1f(item.uniforms.scale, state.flameScale);
@@ -938,9 +951,10 @@ function getExportPlan() {
     seconds: roundedSeconds,
     frames: Math.ceil(roundedSeconds * EXPORT_FPS),
     fps: EXPORT_FPS,
-    width: EXPORT_SIZE,
-    height: EXPORT_SIZE,
+    width: EXPORT_WIDTH,
+    height: EXPORT_HEIGHT,
     mimeType: getSupportedMp4MimeType(),
+    startTime: (performance.now() - shaderRuntime.origin) / 1000,
   };
 }
 
@@ -951,16 +965,13 @@ async function exportCurrentGradientMp4() {
     return;
   }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = plan.width;
-  canvas.height = plan.height;
-  const context = canvas.getContext("2d", { alpha: false });
-  if (!context) {
-    copyStatus.textContent = "MP4 export could not start because the canvas renderer is unavailable.";
+  const renderer = createExportShaderRenderer(plan.width, plan.height);
+  if (!renderer) {
+    copyStatus.textContent = "MP4 export could not start because the WebGL export renderer is unavailable.";
     return;
   }
 
-  const stream = canvas.captureStream(plan.fps);
+  const stream = renderer.canvas.captureStream(plan.fps);
   const chunks = [];
   const recorder = new MediaRecorder(stream, {
     mimeType: plan.mimeType,
@@ -981,7 +992,7 @@ async function exportCurrentGradientMp4() {
 
   try {
     recorder.start(250);
-    await renderExportFrames(context, plan);
+    await renderExportFrames(renderer, plan);
     recorder.stop();
     await finished;
     const blob = new Blob(chunks, { type: plan.mimeType });
@@ -993,11 +1004,12 @@ async function exportCurrentGradientMp4() {
     copyStatus.textContent = error.message || "MP4 export failed.";
   } finally {
     stream.getTracks().forEach((track) => track.stop());
+    cleanupExportShaderRenderer(renderer);
     exportMp4Button.disabled = false;
   }
 }
 
-function renderExportFrames(context, plan) {
+function renderExportFrames(renderer, plan) {
   const start = performance.now();
   let lastFrame = -1;
   return new Promise((resolve) => {
@@ -1005,131 +1017,79 @@ function renderExportFrames(context, plan) {
       const elapsed = (now - start) / 1000;
       const frame = Math.min(Math.floor(elapsed * plan.fps), plan.frames - 1);
       if (frame !== lastFrame) {
-        drawExportFrame(context, (frame % plan.frames) / plan.frames, plan);
+        drawExportFrame(renderer, frame / plan.fps, plan);
         lastFrame = frame;
       }
       if (elapsed < plan.seconds) {
         requestAnimationFrame(tick);
         return;
       }
-      drawExportFrame(context, 0, plan);
+      drawExportFrame(renderer, 0, plan);
       resolve();
     };
-    drawExportFrame(context, 0, plan);
+    drawExportFrame(renderer, 0, plan);
     requestAnimationFrame(tick);
   });
 }
 
-function drawExportFrame(context, progress, plan) {
-  const width = plan.width;
-  const height = plan.height;
-  const breath = breathPulse(progress, 1, 0);
-  const sway = wave(progress, 0.18, 1) * state.sway;
-  const rise = wave(progress, 0.42, 2) * state.rise;
-  const field = state.flameScale;
-  const baseRotation = state.flameRotation * Math.PI / 180;
-
-  context.save();
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "#e2001e";
-  context.fillRect(0, 0, width, height);
-  context.filter = state.shaderBlur > 0 ? `blur(${Math.round(state.shaderBlur)}px)` : "none";
-
-  drawExportLayer(context, width, height, {
-    ...rotatedExportOffset(sway * 0.06, rise * 0.025, baseRotation),
-    rx: state.flameWidth * 0.74 * field,
-    ry: state.flameHeight * 0.82 * field,
-    rotation: baseRotation + sway * 0.14,
-    alpha: clamp(0.68 + state.flameStrength * 0.18, 0, 0.94),
-    stops: redStops(),
-  });
-
-  drawExportLayer(context, width, height, {
-    ...rotatedExportOffset(-state.flameWidth * 0.34 + sway * 0.025, state.flameHeight * 0.22, baseRotation),
-    rx: state.flameWidth * 0.7 * field,
-    ry: state.flameHeight * 0.56 * field,
-    rotation: baseRotation - 0.08 + sway * 0.1,
-    alpha: clamp(state.deepPressure * 0.52, 0, 0.86),
-    stops: deepStops(),
-  });
-
-  drawExportLayer(context, width, height, {
-    ...rotatedExportOffset(state.flameWidth * 0.28 + sway * 0.04, -state.flameHeight * 0.32 - breath * 0.04, baseRotation),
-    rx: state.flameWidth * 0.54 * field,
-    ry: state.flameHeight * 0.62 * field,
-    rotation: baseRotation + 0.18 + sway * 0.16,
-    alpha: clamp((0.34 + breath * 0.22) * state.warmLight, 0, 0.86),
-    stops: warmStops(),
-  });
-
-  drawExportLayer(context, width, height, {
-    ...rotatedExportOffset(sway * 0.02, -state.flameHeight * 0.08, baseRotation),
-    rx: state.flameWidth * 0.28 * field,
-    ry: state.flameHeight * 0.76 * field,
-    rotation: baseRotation - 0.18 + sway * 0.22,
-    alpha: clamp((0.2 + breath * 0.16) * state.warmLight * state.tongue, 0, 0.46),
-    stops: warmStops(),
-  });
-
-  context.filter = "none";
-  context.restore();
+function drawExportFrame(renderer, elapsed, plan) {
+  drawShaderRenderer(renderer.shader, plan.startTime + elapsed, renderer.sourceCanvas.width, renderer.sourceCanvas.height);
+  renderer.context.clearRect(0, 0, plan.width, plan.height);
+  renderer.context.filter = renderer.blur > 0 ? `blur(${renderer.blur}px)` : "none";
+  renderer.context.drawImage(renderer.sourceCanvas, -renderer.pad, -renderer.pad);
+  renderer.context.filter = "none";
 }
 
-function rotatedExportOffset(x, y, rotation) {
-  const c = Math.cos(rotation);
-  const s = Math.sin(rotation);
+function createExportShaderRenderer(width, height) {
+  const blur = Math.max(0, Math.round(state.shaderBlur));
+  const pad = blur * 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) return null;
+
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = width + pad * 2;
+  sourceCanvas.height = height + pad * 2;
+  const gl = sourceCanvas.getContext("webgl", {
+    alpha: false,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    preserveDrawingBuffer: true,
+    powerPreference: "high-performance",
+  });
+  if (!gl) return null;
+
+  const program = createShaderProgram(gl);
+  if (!program) return null;
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    -1, -1,
+    1, -1,
+    -1, 1,
+    -1, 1,
+    1, -1,
+    1, 1,
+  ]), gl.STATIC_DRAW);
+
   return {
-    x: state.flameX + c * x - s * y,
-    y: state.flameY + s * x + c * y,
+    canvas,
+    context,
+    sourceCanvas,
+    pad,
+    blur,
+    shader: createShaderRenderer(gl, sourceCanvas, program, buffer),
   };
 }
 
-function drawExportLayer(context, width, height, layer) {
-  context.save();
-  context.globalAlpha = clamp(layer.alpha, 0, 1);
-  context.translate(layer.x * width, layer.y * height);
-  context.rotate(layer.rotation);
-  context.scale(layer.rx * width, layer.ry * height);
-  const gradient = context.createRadialGradient(0, 0, 0, 0, 0, 1);
-  layer.stops.forEach((stop) => gradient.addColorStop(stop.offset, stop.color));
-  context.fillStyle = gradient;
-  context.fillRect(-1.2, -1.2, 2.4, 2.4);
-  context.restore();
-}
-
-function redStops() {
-  return [
-    { offset: 0, color: "rgba(226, 0, 30, 1)" },
-    { offset: 0.48, color: "rgba(226, 0, 30, 0.9)" },
-    { offset: 0.82, color: "rgba(226, 0, 30, 0.2)" },
-    { offset: 1, color: "rgba(226, 0, 30, 0)" },
-  ];
-}
-
-function deepStops() {
-  return [
-    { offset: 0, color: "rgba(82, 2, 8, 1)" },
-    { offset: 0.44, color: "rgba(82, 2, 8, 0.78)" },
-    { offset: 0.78, color: "rgba(82, 2, 8, 0.24)" },
-    { offset: 1, color: "rgba(82, 2, 8, 0)" },
-  ];
-}
-
-function warmStops() {
-  return [
-    { offset: 0, color: "rgba(240, 108, 35, 1)" },
-    { offset: 0.48, color: "rgba(240, 108, 35, 0.88)" },
-    { offset: 0.86, color: "rgba(240, 108, 35, 0.28)" },
-    { offset: 1, color: "rgba(240, 108, 35, 0)" },
-  ];
-}
-
-function wave(progress, offset = 0, cycles = 1) {
-  return Math.sin(((progress + offset) * cycles) * TAU);
-}
-
-function breathPulse(progress, cycles = 1, offset = 0) {
-  return 0.5 - Math.cos(((progress + offset) * cycles) * TAU) * 0.5;
+function cleanupExportShaderRenderer(renderer) {
+  const { gl, buffer, program } = renderer.shader;
+  gl.deleteBuffer(buffer);
+  gl.deleteProgram(program);
 }
 
 function downloadBlob(blob, filename) {

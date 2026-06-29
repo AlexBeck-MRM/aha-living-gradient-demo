@@ -211,9 +211,9 @@ input {
 .lg-shader-canvas {
   position: absolute;
   z-index: 0;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  inset: calc(var(--lg-shader-blur) * -2);
+  width: calc(100% + (var(--lg-shader-blur) * 4));
+  height: calc(100% + (var(--lg-shader-blur) * 4));
   opacity: 0;
   pointer-events: none;
   filter: blur(var(--lg-shader-blur));
