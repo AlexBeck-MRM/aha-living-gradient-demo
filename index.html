@@ -6,10 +6,10 @@
     <title>AHA Living Gradient Playground</title>
     <meta name="description" content="Internal prototype for testing subtle red-led living gradient motion across logo, button, card, and background surfaces.">
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=25-rotation-scale-controls">
   </head>
   <body>
-    <div class="prototype" data-mode="breath" data-p3="false">
+    <div class="prototype" data-mode="flame" data-preset="A">
       <header class="status-bar" aria-label="Prototype status">
         <div class="partners" aria-label="Project partners">
           <img class="partner-logo logo-mrm" src="assets/logo-mrm.svg" alt="MRM">
@@ -22,7 +22,7 @@
         </div>
 
         <div class="project-meta">
-          <span>Last Updated: June 26, 2026</span>
+          <span>Last Updated: June 29, 2026</span>
           <span>Status: Internal Preview</span>
         </div>
       </header>
@@ -31,23 +31,23 @@
         <section class="preview-area" aria-label="Gradient preview surfaces">
           <article class="preview-panel preview-panel-logo" aria-label="Logo preview">
             <div class="logo-stage figma-logo-stage">
-              <div class="aha-logo-effect aha-logo-effect-large living-gradient" data-surface="logo" data-mode="breath" role="img" aria-label="American Heart Association logo filled with the living gradient"></div>
-              <div class="aha-logo-effect aha-logo-effect-small living-gradient" data-surface="logo" data-mode="breath" aria-hidden="true"></div>
+              <div class="aha-logo-effect aha-logo-effect-large living-gradient" data-surface="logo" data-mode="flame" role="img" aria-label="American Heart Association logo filled with the living flame gradient"></div>
+              <div class="aha-logo-effect aha-logo-effect-small living-gradient" data-surface="logo" data-mode="flame" aria-hidden="true"></div>
             </div>
           </article>
 
           <article class="preview-panel preview-panel-button" aria-label="Button preview">
-            <button class="donate-button living-gradient" data-surface="button" data-mode="breath" type="button">
+            <button class="donate-button living-gradient" data-surface="button" data-mode="flame" type="button">
               <span>Donate today</span>
             </button>
           </article>
 
           <article class="preview-panel preview-panel-background" aria-label="Background preview">
-            <div class="background-surface living-gradient" data-surface="background" data-mode="breath" aria-hidden="true"></div>
+            <div class="background-surface living-gradient" data-surface="background" data-mode="flame" aria-hidden="true"></div>
           </article>
 
           <article class="preview-panel preview-panel-card" aria-label="Card preview">
-            <section class="donation-card living-gradient" data-surface="card" data-mode="breath" aria-labelledby="donation-card-title">
+            <section class="donation-card living-gradient" data-surface="card" data-mode="flame" aria-labelledby="donation-card-title">
               <div class="card-content">
                 <h3 id="donation-card-title">Donate Today</h3>
                 <p>Your donation supports research, CPR training, stroke care, and education for families.</p>
@@ -63,14 +63,16 @@
               <p class="tool-label">Living gradient controls</p>
               <h1>AHA red motion lab</h1>
             </div>
-            <span class="mode-readout" data-mode-readout>Breath Field</span>
+            <span class="mode-readout" data-mode-readout>Preset A</span>
           </div>
 
           <form class="controls parameterizer-scroll" id="controls" data-control-root></form>
 
-          <div class="parameterizer-actions" aria-label="Parameter export actions">
+          <div class="parameterizer-actions" aria-label="Parameter save and export actions">
+            <button class="copy-button" type="button" data-save-config>Save Settings</button>
             <button class="copy-button" type="button" data-copy-css>Copy CSS</button>
             <button class="copy-button copy-button-secondary" type="button" data-copy-config>Copy Config</button>
+            <button class="copy-button copy-button-secondary" type="button" data-export-mp4>Export MP4</button>
             <button class="copy-button copy-button-secondary" type="button" data-reset-config>Reset</button>
           </div>
 
